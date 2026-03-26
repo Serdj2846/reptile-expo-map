@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Выставки рептилий и пауков</title>
+    <script src="https://api-maps.yandex.ru/2.1/?apikey=05ce4420-3f53-492e-b969-28637a8068d7&lang=ru_RU"></script>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: 'Segoe UI', sans-serif; }
+        #map { width: 100%; height: 100%; }
+        .info { position: fixed; bottom: 20px; left: 20px; background: white; padding: 10px 15px; border-radius: 8px; z-index: 1000; font-size: 14px; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .legend { position: fixed; top: 20px; right: 20px; background: white; padding: 10px 15px; border-radius: 8px; z-index: 1000; font-size: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .legend span { display: inline-block; width: 20px; height: 20px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+        .controls { position: fixed; bottom: 20px; right: 20px; background: #2d5a2c; color: white; padding: 10px 20px; border-radius: 8px; cursor: pointer; z-index: 1000; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .controls:hover { background: #1e3a1e; }
+        .sidebar { position: fixed; left: 20px; top: 20px; width: 320px; max-height: 80vh; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 1000; overflow-y: auto; display: none; }
+        .sidebar-header { background: #2d5a2c; color: white; padding: 10px; border-radius: 8px 8px 0 0; cursor: pointer; font-weight: bold; }
+        .sidebar-content { padding: 10px; }
+        .exhibition-item { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; transition: background 0.2s; }
+        .exhibition-item:hover { background: #f0f0f0; }
+        .exhibition-title { font-weight: bold; color: #2d5a2c; }
+        .exhibition-date { font-size: 11px; color: #666; margin-top: 3px; }
+        .exhibition-address { font-size: 11px; color: #2d5a2c; margin-top: 3px; font-family: monospace; }
+        .close-btn { float: right; cursor: pointer; }
+        .show-list { position: fixed; left: 20px; top: 20px; background: #2d5a2c; color: white; padding: 10px 15px; border-radius: 8px; cursor: pointer; z-index: 1000; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .show-list:hover { background: #1e3a1e; }
+        .check-address { display: inline-block; margin-top: 8px; background: #2d5a2c; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-size: 11px; }
+        .check-address:hover { background: #1e3a1e; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="show-list" onclick="toggleSidebar()">📋 Список</div>
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">📋 Выставки <span class="close-btn" onclick="toggleSidebar()">✖</span></div>
+        <div class="sidebar-content" id="sidebar-content">Загрузка...</div>
+    </div>
+    <div class="info" id="info">Загрузка...</div>
+    <div class="legend">
+        <div><span style="background: #ff4444;"></span> Пауки</div>
+        <div><span style="background: #44ff44;"></span> Рептилии</div>
+        <div><span style="background: #ffaa44;"></span> Смешанные</div>
+    </div>
+    <div class="controls" onclick="fitToMarkers()">🔍 Показать все</div>
+
+    <script>
+        const exhibitionsData = [
+            // Исходные выставки (12)
+            { id: 1, title: "Выставка рептилий и пауков", date: "28-29 марта", city: "Княгинино", lat: 55.820, lng: 45.030, address: "ДК г. Княгинино", category: "Смешанная", url: "https://vk.com/wall-35039260_117620" },
+            { id: 2, title: "Звериное царство", date: "постоянно", city: "Иваново", lat: 56.997, lng: 40.973, address: "ТРЦ Евролэнд, галерея Париж", category: "Смешанная", url: "https://vk.com/wall-114496062_9148" },
+            { id: 3, title: "Пауки Гиганты", date: "21 фев - 15 апр", city: "Уфа", lat: 54.734, lng: 55.958, address: "ТЦ Планета, ул. Энтузиастов, 20", category: "Пауки", url: "https://vk.com/wall-34762899_1376357" },
+            { id: 4, title: "ЭКЗОТИК ПАРК", date: "ежедневно", city: "Элиста", lat: 46.308, lng: 44.270, address: "ТЦ Романтика, ул. Ю.Нейман, 1", category: "Смешанная", url: "https://vk.com/wall-138789001_457733" },
+            { id: 5, title: "Выставка в ТРЦ Евролэнд", date: "постоянно", city: "Иваново", lat: 56.997, lng: 40.973, address: "ТРЦ Евролэнд", category: "Смешанная", url: "https://vk.com/wall-114496062_9146" },
+            { id: 6, title: "Пауки Гиганты", date: "20 мар - 5 апр", city: "Котлас", lat: 61.252, lng: 46.645, address: "ТРЦ Столица, пр. Мира 18", category: "Пауки", url: "https://vk.com/wall-67055297_2019021" },
+            { id: 7, title: "Выставка пауков-гигантов", date: "28 мар - 26 апр", city: "Кемерово", lat: 55.354, lng: 86.088, address: "МФК Европа Сити", category: "Пауки", url: "https://vk.com/wall-234293306_13955" },
+            { id: 8, title: "Нагана", date: "4-5 апреля", city: "Уфа", lat: 54.734, lng: 55.958, address: "ул. Менделеева 205а", category: "Смешанная", url: "https://vk.com/wall-64214104_8583662" },
+            { id: 9, title: "Выставка пауков", date: "14 мар - 5 апр", city: "Бирюсинск", lat: 55.953, lng: 97.820, address: "ул. Горького, 1", category: "Пауки", url: "https://vk.com/wall-166861442_920" },
+            { id: 10, title: "Выставка пауков", date: "28 мар - 31 май", city: "Кемерово", lat: 55.354, lng: 86.088, address: "ТРЦ Лапландия", category: "Пауки", url: "https://vk.com/wall-86183408_163017" },
+            { id: 11, title: "Пауки Гиганты", date: "25-29 марта", city: "Локоть", lat: 52.565, lng: 34.550, address: "ТЦ ЛОКОТОК", category: "Пауки", url: "https://vk.com/wall-161280654_10972" },
+            { id: 12, title: "Трогательные рептилии", date: "даты уточняются", city: "Екатеринбург", lat: 56.838, lng: 60.605, address: "ТРЦ КИТ", category: "Рептилии", url: "https://vk.com/wall-178249942_4526" },
+            
+            // Новые добавленные (7)
+            { id: 13, title: "Выставка пауков (Бирюсинск)", date: "14 марта - 5 апреля", city: "Бирюсинск", lat: 55.953, lng: 97.820, address: "ул. Горького, 1", category: "Пауки", url: "https://vk.com/wall-166861442_920" },
+            { id: 14, title: "Удивительный мир пауков и скорпионов", date: "28 марта - 31 мая", city: "Кемерово", lat: 55.354, lng: 86.088, address: "ТРЦ Лапландия", category: "Пауки", url: "https://vk.com/wall-86183408_163017" },
+            { id: 15, title: "Пауки Гиганты (Котлас)", date: "20 марта - 5 апреля", city: "Котлас", lat: 61.252, lng: 46.645, address: "ТРЦ Столица, пр. Мира 18", category: "Пауки", url: "https://vk.com/wall-67055297_2019021" },
+            { id: 16, title: "ЭКЗОТИК ПАРК", date: "ежедневно", city: "Элиста", lat: 46.308, lng: 44.270, address: "ТЦ Романтика, ул. Ю.Нейман, 1", category: "Смешанная", url: "https://vk.com/wall-138789001_457733" },
+            { id: 17, title: "Нагана", date: "4-5 апреля", city: "Уфа", lat: 54.734, lng: 55.958, address: "ул. Менделеева 205а, зал Место Событий", category: "Смешанная", url: "https://vk.com/wall-64214104_8583662" },
+            { id: 18, title: "Звериное царство", date: "постоянно", city: "Иваново", lat: 56.997, lng: 40.973, address: "ТРЦ Евролэнд, галерея Париж", category: "Смешанная", url: "https://vk.com/wall-114496062_9148" },
+            { id: 19, title: "Трогательные рептилии", date: "даты уточняются", city: "Екатеринбург", lat: 56.838, lng: 60.605, address: "ТРЦ КИТ", category: "Рептилии", url: "https://vk.com/wall-178249942_4526" }
+        ];
+
+        // Удаляем дубликаты по URL
+        const uniqueData = [];
+        const seenUrls = new Set();
+        for (const ex of exhibitionsData) {
+            if (!seenUrls.has(ex.url)) {
+                uniqueData.push(ex);
+                seenUrls.add(ex.url);
+            }
+        }
+
+        let map, placemarks = [];
+        
+        ymaps.ready(init);
+        
+        function init() {
+            map = new ymaps.Map("map", {
+                center: [55.75, 37.61],
+                zoom: 4,
+                controls: ['zoomControl', 'fullscreenControl']
+            });
+            
+            document.getElementById('info').innerHTML = `📊 Найдено: ${uniqueData.length} выставок (без МСК и СПб)`;
+            addPlacemarks();
+            fillSidebar();
+        }
+        
+        function addPlacemarks() {
+            uniqueData.forEach((ex, i) => {
+                let color = ex.category === 'Пауки' ? '#ff4444' : (ex.category === 'Рептилии' ? '#44ff44' : '#ffaa44');
+                const fullAddress = ex.address ? `${ex.city}, ${ex.address}` : ex.city;
+                const mapsLink = `https://yandex.ru/maps/?text=${encodeURIComponent(fullAddress)}`;
+                
+                let p = new ymaps.Placemark([ex.lat, ex.lng], {
+                    balloonContent: `
+                        <div style="min-width: 280px;">
+                            <b>${ex.title}</b><br>
+                            📅 ${ex.date}<br>
+                            📍 ${fullAddress}<br>
+                            🏷️ ${ex.category}<br>
+                            <a href="${ex.url}" target="_blank">🔗 Подробнее в VK</a><br>
+                            <a href="${mapsLink}" target="_blank" class="check-address">📍 Открыть в Яндекс.Картах</a>
+                        </div>
+                    `,
+                    hintContent: ex.title
+                }, { preset: 'islands#circleIcon', iconColor: color });
+                
+                map.geoObjects.add(p);
+                placemarks.push(p);
+            });
+            
+            document.getElementById('info').innerHTML = `📊 Найдено: ${uniqueData.length} | 🗺️ Маркеров: ${placemarks.length}`;
+            if (placemarks.length) fitToMarkers();
+        }
+        
+        function fitToMarkers() {
+            if (placemarks.length) {
+                let bounds = map.geoObjects.getBounds();
+                map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 50 });
+            }
+        }
+        
+        function fillSidebar() {
+            const container = document.getElementById('sidebar-content');
+            container.innerHTML = '';
+            uniqueData.forEach((ex, i) => {
+                const div = document.createElement('div');
+                div.className = 'exhibition-item';
+                div.onclick = () => {
+                    map.panTo(placemarks[i].geometry.getCoordinates());
+                    placemarks[i].balloon.open();
+                    toggleSidebar();
+                };
+                const fullAddress = ex.address ? `${ex.city}, ${ex.address}` : ex.city;
+                div.innerHTML = `<div class="exhibition-title">${ex.title}</div><div class="exhibition-date">📅 ${ex.date}</div><div class="exhibition-address">📍 ${fullAddress}</div>`;
+                container.appendChild(div);
+            });
+        }
+        
+        function toggleSidebar() {
+            const s = document.getElementById('sidebar');
+            s.style.display = s.style.display === 'none' ? 'block' : 'none';
+        }
+    </script>
+</body>
+</html>
